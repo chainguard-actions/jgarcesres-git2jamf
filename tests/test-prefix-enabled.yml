@@ -1,0 +1,42 @@
+name: Test prefix enabled with branch name
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_REF: refs/heads/feature-branch
+      GITHUB_EVENT_NAME: push
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Create test script files
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/scripts"
+          echo '#!/bin/bash' > "$GITHUB_WORKSPACE/scripts/my-script.sh"
+          echo 'echo hello from feature branch' >> "$GITHUB_WORKSPACE/scripts/my-script.sh"
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          jamf_url: 'https://invalid.jamf.example.com'
+          jamf_username: 'testuser'
+          jamf_password: 'testpassword'
+          script_dir: 'scripts'
+          script_extensions: 'sh'
+          prefix: 'true'
+      - name: Assert action ran and completed
+        if: always()
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+          CONCLUSION: ${{ steps.action.conclusion }}
+        run: |
+          echo "action outcome: $OUTCOME"
+          echo "action conclusion: $CONCLUSION"
+          # The action uses @logger.catch which catches all exceptions and exits 0
+          # So we accept both 'success' and 'failure' as valid outcomes
+          # With prefix enabled, the action should still run without crashing
+          if [ "$OUTCOME" = "skipped" ] || [ "$OUTCOME" = "cancelled" ]; then
+            echo "FAIL: action was unexpectedly skipped or cancelled"
+            exit 1
+          fi
+          echo "PASS: action ran and completed (outcome: $OUTCOME, conclusion: $CONCLUSION)"

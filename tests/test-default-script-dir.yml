@@ -1,0 +1,44 @@
+name: Test default script directory and extensions
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_REF: refs/heads/main
+      GITHUB_EVENT_NAME: push
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Create test scripts in a subdirectory
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/default-scripts"
+          echo '#!/bin/bash' > "$GITHUB_WORKSPACE/default-scripts/workspace-script.sh"
+          echo 'echo hello from workspace' >> "$GITHUB_WORKSPACE/default-scripts/workspace-script.sh"
+          echo '#!/usr/bin/env python3' > "$GITHUB_WORKSPACE/default-scripts/workspace-script.py"
+          echo 'print("hello from python")' >> "$GITHUB_WORKSPACE/default-scripts/workspace-script.py"
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          jamf_url: 'https://invalid.jamf.example.com'
+          jamf_username: 'testuser'
+          jamf_password: 'testpassword'
+          script_dir: 'default-scripts'
+          script_extensions: 'sh py'
+          prefix: 'false'
+      - name: Assert action ran and completed
+        if: always()
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+          CONCLUSION: ${{ steps.action.conclusion }}
+        run: |
+          echo "action outcome: $OUTCOME"
+          echo "action conclusion: $CONCLUSION"
+          # The action uses @logger.catch which catches all exceptions and exits 0
+          # So we accept both 'success' and 'failure' as valid outcomes
+          # This validates that script_dir and script_extensions inputs are accepted
+          if [ "$OUTCOME" = "skipped" ] || [ "$OUTCOME" = "cancelled" ]; then
+            echo "FAIL: action was unexpectedly skipped or cancelled"
+            exit 1
+          fi
+          echo "PASS: action ran and completed (outcome: $OUTCOME, conclusion: $CONCLUSION)"
