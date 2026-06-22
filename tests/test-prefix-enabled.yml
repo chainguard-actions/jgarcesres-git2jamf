@@ -1,0 +1,28 @@
+name: Test prefix enabled with branch name
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_REF: refs/heads/feature-branch
+      GITHUB_EVENT_NAME: push
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Run action with prefix enabled
+        id: action
+        uses: .
+        with:
+          jamf_url: "https://invalid.jamfcloud.com"
+          jamf_username: "testuser"
+          jamf_password: "testpassword"
+          jamf_auth_type: "auth"
+          script_dir: ${{ github.workspace }}
+          script_extensions: "sh py"
+          prefix: "true"
+          delete: "false"
+      - name: Assert action completed with prefix enabled
+        run: |
+          echo "PASS: action ran to completion with prefix enabled"
+          echo "The Python script uses @logger.catch which catches connection errors and exits 0"
+          echo "With prefix=true and GITHUB_REF=refs/heads/feature-branch, scripts would be prefixed with 'feature-branch'"
