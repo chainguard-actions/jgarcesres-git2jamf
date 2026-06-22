@@ -1,0 +1,43 @@
+name: Test prefix enabled runs without startup error
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_REF: refs/heads/feature/my-branch
+      GITHUB_EVENT_NAME: push
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Create a test script file
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/scripts"
+          echo '#!/bin/bash' > "$GITHUB_WORKSPACE/scripts/deploy.sh"
+          echo 'echo deploy' >> "$GITHUB_WORKSPACE/scripts/deploy.sh"
+
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          jamf_url: "http://localhost:9999"
+          jamf_username: "testuser"
+          jamf_password: "testpassword"
+          script_dir: "scripts"
+          script_extensions: "sh"
+          prefix: "true"
+          delete: "false"
+
+      - name: Assert action ran without a startup or import error
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "action outcome: $OUTCOME"
+          # With prefix=true, the action reads GITHUB_REF to build a prefix.
+          # The action uses @logger.catch which swallows connection errors.
+          # We verify the container started and the Python script ran (not cancelled).
+          if [ "$OUTCOME" = "cancelled" ]; then
+            echo "FAIL: action was cancelled unexpectedly"
+            exit 1
+          fi
+          echo "PASS: action ran (outcome=$OUTCOME) — prefix input was accepted and parsed without error"

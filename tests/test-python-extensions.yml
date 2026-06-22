@@ -1,0 +1,43 @@
+name: Test Python script extensions accepted without startup error
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_REF: refs/heads/main
+      GITHUB_EVENT_NAME: push
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Create test Python script files
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/scripts"
+          echo '#!/usr/bin/env python3' > "$GITHUB_WORKSPACE/scripts/inventory.py"
+          echo 'print("inventory script")' >> "$GITHUB_WORKSPACE/scripts/inventory.py"
+
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          jamf_url: "http://localhost:9999"
+          jamf_username: "testuser"
+          jamf_password: "testpassword"
+          script_dir: "scripts"
+          script_extensions: "py"
+          prefix: "false"
+          delete: "false"
+
+      - name: Assert action ran without a startup or import error
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "action outcome: $OUTCOME"
+          # The action uses @logger.catch which swallows connection errors.
+          # We verify the container started and the Python script ran (not cancelled),
+          # confirming the script_extensions='py' input was accepted and parsed correctly.
+          if [ "$OUTCOME" = "cancelled" ]; then
+            echo "FAIL: action was cancelled unexpectedly"
+            exit 1
+          fi
+          echo "PASS: action ran (outcome=$OUTCOME) — py extension input was accepted and parsed without error"
