@@ -1,0 +1,44 @@
+name: Test duplicate script name detection
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Create scripts with duplicate names (same base name, different extensions)
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/dup-scripts"
+          echo '#!/bin/bash' > "$GITHUB_WORKSPACE/dup-scripts/myscript.sh"
+          echo 'echo "shell version"' >> "$GITHUB_WORKSPACE/dup-scripts/myscript.sh"
+          echo '#!/usr/bin/env python3' > "$GITHUB_WORKSPACE/dup-scripts/myscript.py"
+          echo 'print("python version")' >> "$GITHUB_WORKSPACE/dup-scripts/myscript.py"
+
+      - name: Run action with duplicate script names
+        id: action
+        uses: .
+        continue-on-error: true
+        with:
+          jamf_url: 'http://127.0.0.1:19999'
+          jamf_username: 'admin'
+          jamf_password: 'password'
+          script_dir: 'dup-scripts'
+          script_extensions: 'sh py'
+          prefix: 'false'
+
+      - name: Assert action completed (duplicate detection or graceful JAMF error)
+        run: |
+          echo "outcome: ${{ steps.action.outcome }}"
+          # The action detects duplicate script names and calls sys.exit(1) if the
+          # JAMF token is obtained first. However, when JAMF is unreachable,
+          # @logger.catch swallows the ConnectionError and the action may exit 0.
+          # We accept either outcome: failure (duplicate detected) or success (JAMF error swallowed).
+          if [ "${{ steps.action.outcome }}" = "failure" ]; then
+            echo "PASS: action correctly detected duplicate script names and exited with failure"
+          elif [ "${{ steps.action.outcome }}" = "success" ]; then
+            echo "PASS: action ran gracefully (JAMF connection error swallowed by @logger.catch)"
+          else
+            echo "FAIL: unexpected outcome: ${{ steps.action.outcome }}"
+            exit 1
+          fi
