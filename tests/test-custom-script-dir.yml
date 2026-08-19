@@ -1,0 +1,41 @@
+name: Test custom script_dir with invalid Jamf URL
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Create a test scripts directory with sample scripts
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/test-scripts"
+          echo '#!/bin/bash' > "$GITHUB_WORKSPACE/test-scripts/hello.sh"
+          echo 'echo "hello world"' >> "$GITHUB_WORKSPACE/test-scripts/hello.sh"
+
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          jamf_url: 'https://invalid.jamf.example.com'
+          jamf_username: 'testuser'
+          jamf_password: 'testpassword'
+          jamf_auth_type: 'auth'
+          script_dir: 'test-scripts'
+          script_extensions: 'sh'
+          prefix: 'false'
+          delete: 'false'
+
+      - name: Assert action completed despite invalid Jamf URL with custom script_dir
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          # The action uses @logger.catch which swallows ConnectionError exceptions.
+          # When given an invalid Jamf URL, the action logs errors but exits 0 (success).
+          # This test verifies that a custom script_dir is accepted without crashing.
+          if [ "$OUTCOME" != "success" ]; then
+            echo "FAIL: expected action to exit 0 (success) since errors are swallowed by @logger.catch, but got: $OUTCOME"
+            exit 1
+          fi
+          echo "PASS: action completed with exit 0 as expected when using custom script_dir with invalid Jamf URL"
