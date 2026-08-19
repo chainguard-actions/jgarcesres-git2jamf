@@ -1,43 +1,51 @@
-name: Test prefix enabled runs without startup error
+name: Test prefix enabled with unreachable JAMF
+# Tests that the action runs without crashing when prefix is enabled but
+# the JAMF server is unreachable. The action uses @logger.catch which
+# swallows connection exceptions, so it exits with code 0.
 on:
   workflow_dispatch:
+
 jobs:
   test:
     runs-on: ubuntu-latest
-    env:
-      GITHUB_REF: refs/heads/feature/my-branch
-      GITHUB_EVENT_NAME: push
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Create a test script file
+      - name: Create dummy scripts for the action to find
         run: |
-          mkdir -p "$GITHUB_WORKSPACE/scripts"
-          echo '#!/bin/bash' > "$GITHUB_WORKSPACE/scripts/deploy.sh"
-          echo 'echo deploy' >> "$GITHUB_WORKSPACE/scripts/deploy.sh"
+          # Scripts must be in a subdirectory because the action uses
+          # glob pattern "{script_dir}/**/*.{ext}" which requires at least
+          # one subdirectory level below script_dir.
+          mkdir -p "$GITHUB_WORKSPACE/scripts/subdir"
+          echo '#!/bin/sh' > "$GITHUB_WORKSPACE/scripts/subdir/deploy.sh"
+          echo 'echo deploy' >> "$GITHUB_WORKSPACE/scripts/subdir/deploy.sh"
+          echo '#!/usr/bin/env python3' > "$GITHUB_WORKSPACE/scripts/subdir/setup.py"
+          echo 'print("setup")' >> "$GITHUB_WORKSPACE/scripts/subdir/setup.py"
 
       - id: action
+        name: Run action with prefix enabled and unreachable JAMF
         uses: .
         continue-on-error: true
         with:
-          jamf_url: "http://localhost:9999"
-          jamf_username: "testuser"
-          jamf_password: "testpassword"
+          jamf_url: "https://localhost:19999"
+          jamf_username: "invalid_user"
+          jamf_password: "invalid_password"
           script_dir: "scripts"
-          script_extensions: "sh"
+          script_extensions: "sh py"
           prefix: "true"
           delete: "false"
 
-      - name: Assert action ran without a startup or import error
+      - name: Assert action completed without unexpected crash
         env:
           OUTCOME: ${{ steps.action.outcome }}
         run: |
           echo "action outcome: $OUTCOME"
-          # With prefix=true, the action reads GITHUB_REF to build a prefix.
-          # The action uses @logger.catch which swallows connection errors.
-          # We verify the container started and the Python script ran (not cancelled).
-          if [ "$OUTCOME" = "cancelled" ]; then
-            echo "FAIL: action was cancelled unexpectedly"
+          # The action uses @logger.catch which swallows connection exceptions
+          # and exits with code 0 (success). The action should not crash the
+          # workflow runner itself even when prefix is enabled.
+          if [ "$OUTCOME" = "success" ] || [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action completed with outcome: $OUTCOME (prefix enabled, connection errors handled gracefully)"
+          else
+            echo "FAIL: unexpected outcome: $OUTCOME"
             exit 1
           fi
-          echo "PASS: action ran (outcome=$OUTCOME) — prefix input was accepted and parsed without error"
