@@ -1,41 +1,38 @@
-name: Test invalid auth type - validation and connection failure gracefully handled
+name: Test invalid auth type
 on:
   workflow_dispatch:
 jobs:
   test:
     runs-on: ubuntu-latest
-    env:
-      GITHUB_REF: refs/heads/main
-      GITHUB_EVENT_NAME: push
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Create test script directory with sample scripts
+      - name: Create a test script file
         run: |
-          mkdir -p "$GITHUB_WORKSPACE/test-scripts"
-          printf '#!/bin/bash\necho "hello world"\n' > "$GITHUB_WORKSPACE/test-scripts/hello.sh"
+          mkdir -p "$GITHUB_WORKSPACE/scripts"
+          echo '#!/bin/sh' > "$GITHUB_WORKSPACE/scripts/test-script.sh"
+          echo 'echo hello' >> "$GITHUB_WORKSPACE/scripts/test-script.sh"
 
-      - id: action
-        uses: .
+      - name: Run action with invalid auth type
+        id: action
         continue-on-error: true
+        uses: .
         with:
-          jamf_url: "http://localhost:9999"
+          jamf_url: "http://invalid-jamf-host.example.invalid"
           jamf_username: "testuser"
           jamf_password: "testpassword"
-          jamf_auth_type: "invalid_type"
-          script_dir: "test-scripts"
+          jamf_auth_type: "invalid_auth_type"
+          script_dir: "scripts"
           script_extensions: "sh"
-          prefix: "false"
           delete: "false"
 
-      - name: Assert action ran with a definitive outcome (invalid auth_type is logged and handled)
-        env:
-          OUTCOME: ${{ steps.action.outcome }}
+      - name: Assert action ran (invalid auth type logs error but does not exit)
         run: |
-          echo "action outcome: $OUTCOME"
-          if [ "$OUTCOME" = "success" ] || [ "$OUTCOME" = "failure" ]; then
-            echo "PASS: action ran and produced a definitive outcome: $OUTCOME"
-          else
-            echo "FAIL: unexpected outcome: $OUTCOME"
+          echo "outcome: ${{ steps.action.outcome }}"
+          # The action logs an error for invalid auth_type but does not call sys.exit().
+          # Subsequent connection errors are swallowed by @logger.catch. Action exits 0.
+          if [ "${{ steps.action.outcome }}" != "success" ]; then
+            echo "FAIL: expected action to exit 0 (invalid auth type is logged but not fatal)"
             exit 1
           fi
+          echo "PASS: action ran and exited cleanly despite invalid auth type"

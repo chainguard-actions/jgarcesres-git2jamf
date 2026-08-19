@@ -1,41 +1,41 @@
-name: Test prefix enabled - branch name used as script prefix
+name: Test prefix enabled with invalid Jamf URL
 on:
   workflow_dispatch:
 jobs:
   test:
     runs-on: ubuntu-latest
-    env:
-      GITHUB_REF: refs/heads/feature-branch
-      GITHUB_EVENT_NAME: push
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Create test script directory with sample scripts
+      - name: Create a test script file
         run: |
-          mkdir -p "$GITHUB_WORKSPACE/test-scripts"
-          printf '#!/bin/bash\necho "hello world"\n' > "$GITHUB_WORKSPACE/test-scripts/hello.sh"
+          mkdir -p "$GITHUB_WORKSPACE/scripts"
+          echo '#!/bin/sh' > "$GITHUB_WORKSPACE/scripts/test-script.sh"
+          echo 'echo hello' >> "$GITHUB_WORKSPACE/scripts/test-script.sh"
 
-      - id: action
-        uses: .
+      - name: Run action with prefix enabled and invalid Jamf URL
+        id: action
         continue-on-error: true
+        uses: .
+        env:
+          GITHUB_REF: refs/heads/main
         with:
-          jamf_url: "http://localhost:9999"
+          jamf_url: "http://invalid-jamf-host.example.invalid"
           jamf_username: "testuser"
           jamf_password: "testpassword"
           jamf_auth_type: "auth"
-          script_dir: "test-scripts"
+          script_dir: "scripts"
           script_extensions: "sh"
           prefix: "true"
           delete: "false"
 
-      - name: Assert action ran with a definitive outcome (prefix enabled path exercised)
-        env:
-          OUTCOME: ${{ steps.action.outcome }}
+      - name: Assert action ran (connection errors are swallowed by exception handler)
         run: |
-          echo "action outcome: $OUTCOME"
-          if [ "$OUTCOME" = "success" ] || [ "$OUTCOME" = "failure" ]; then
-            echo "PASS: action ran and produced a definitive outcome: $OUTCOME"
-          else
-            echo "FAIL: unexpected outcome: $OUTCOME"
+          echo "outcome: ${{ steps.action.outcome }}"
+          # The action uses @logger.catch which swallows connection exceptions and
+          # exits 0 even when the Jamf URL is unreachable with prefix enabled.
+          if [ "${{ steps.action.outcome }}" != "success" ]; then
+            echo "FAIL: expected action to exit 0 (exception handling swallows connection errors)"
             exit 1
           fi
+          echo "PASS: action ran and exited cleanly with prefix enabled despite unreachable Jamf URL"

@@ -1,0 +1,38 @@
+name: Test basic usage with invalid Jamf URL
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Create a test script file
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/scripts"
+          echo '#!/bin/sh' > "$GITHUB_WORKSPACE/scripts/test-script.sh"
+          echo 'echo hello' >> "$GITHUB_WORKSPACE/scripts/test-script.sh"
+
+      - name: Run action with invalid Jamf URL
+        id: action
+        continue-on-error: true
+        uses: .
+        with:
+          jamf_url: "http://invalid-jamf-host.example.invalid"
+          jamf_username: "testuser"
+          jamf_password: "testpassword"
+          jamf_auth_type: "auth"
+          script_dir: "scripts"
+          script_extensions: "sh"
+          delete: "false"
+
+      - name: Assert action ran (connection errors are swallowed by exception handler)
+        run: |
+          echo "outcome: ${{ steps.action.outcome }}"
+          # The action uses @logger.catch which swallows connection exceptions and
+          # exits 0 even when the Jamf URL is unreachable. Verify the action ran.
+          if [ "${{ steps.action.outcome }}" != "success" ]; then
+            echo "FAIL: expected action to exit 0 (exception handling swallows connection errors)"
+            exit 1
+          fi
+          echo "PASS: action ran and exited cleanly despite unreachable Jamf URL"
